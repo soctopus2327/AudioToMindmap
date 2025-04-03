@@ -9,3 +9,4 @@ pygraphviz
 transformers
 spacy
 python-dotenv
+python-magic

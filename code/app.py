@@ -14,7 +14,6 @@ from transformers import BertTokenizer, BertModel
 import spacy
 from io import BytesIO
 
-# Load English language model for spaCy
 try:
     nlp = spacy.load("en_core_web_sm")
 except:
@@ -93,7 +92,6 @@ def extract_key_elements(text):
 # 3. Mindmap Generation
 # --------------------------
 def create_mindmap(text):
-    # Process text and get relationships
     sentences, embeddings = process_text(text)
     if not sentences:
         return None, None
@@ -104,7 +102,6 @@ def create_mindmap(text):
     
     key_phrases, entities = extract_key_elements(text)
     
-    # Create NetworkX graph
     nx_graph = nx.Graph()
     
     # Central node (most connected sentence)
@@ -115,17 +112,14 @@ def create_mindmap(text):
     central_node = max(connection_counts.items(), key=lambda x: x[1])[0]
     nx_graph.add_node(central_node, level=0, type='central', size=3000)
     
-    # Add relationships
     for rel in relationships:
         if rel[0] == central_node or rel[1] == central_node:
             other_node = rel[1] if rel[0] == central_node else rel[0]
             nx_graph.add_node(other_node, level=1, type='sentence', size=2000)
             nx_graph.add_edge(central_node, other_node, weight=rel[2])
     
-    # Add key phrases and entities
     for phrase in key_phrases[:10]:  # Top 10 phrases
         nx_graph.add_node(phrase, level=2, type='phrase', size=1500)
-        # Connect to most relevant sentence
         best_sent = None
         best_sim = 0
         for node in nx_graph.nodes():
@@ -136,14 +130,11 @@ def create_mindmap(text):
         if best_sent:
             nx_graph.add_edge(best_sent, phrase, weight=0.7)
     
-    # Create Graphviz graph with improved formatting
     gv_graph = graphviz.Digraph(engine='dot')
     gv_graph.attr(rankdir='TB', size='12,12', ratio='auto')
     
-    # Add nodes with styling
     for node in nx_graph.nodes():
         node_type = nx_graph.nodes[node]['type']
-        # Wrap text to multiple lines
         wrapped_text = '\n'.join([node[i:i+30] for i in range(0, len(node), 30)])
         if node_type == 'central':
             gv_graph.node(str(hash(node)), wrapped_text, shape='doublecircle', 
@@ -155,7 +146,6 @@ def create_mindmap(text):
             gv_graph.node(str(hash(node)), wrapped_text, shape='box', 
                           style='filled', fillcolor='#59A14F', fontsize='10')
     
-    # Add edges
     for edge in nx_graph.edges():
         gv_graph.edge(str(hash(edge[0])), str(hash(edge[1])))
     
@@ -167,7 +157,6 @@ def create_mindmap(text):
 def draw_networkx_graph(G):
     plt.figure(figsize=(16, 12))
     
-    # Prepare node colors and sizes
     node_colors = []
     node_sizes = []
     for node in G.nodes():
@@ -214,7 +203,11 @@ def save_graphviz_as_image(gv_graph, format='jpeg'):
 # --------------------------
 # 5. Streamlit App
 # --------------------------
-st.title("🧠 Audio to Mindmap Converter")
+st.title("🧠 Audio to Mindmap Generator")
+
+@st.cache_resource
+def load_model():
+    return whisper.load_model("base")
 
 uploaded_file = st.file_uploader("Upload audio file (WAV/MP3)", type=["wav", "mp3"])
 if uploaded_file:
@@ -235,33 +228,33 @@ if uploaded_file:
             st.stop()
     
     # Mindmap Generation
-    with st.spinner("Building semantic mindmap..."):
+    with st.spinner("Building mindmap..."):
         nx_graph, gv_graph = create_mindmap(text)
         
         if nx_graph and gv_graph:
-            st.subheader("Interactive Network View")
+            st.subheader("NetworkX Mindmap")
             plt_obj = draw_networkx_graph(nx_graph)
             st.pyplot(plt_obj)
             
             # Download button for NetworkX graph
             nx_img = save_graph_as_image(plt_obj)
             st.download_button(
-                label="Download Network View as JPEG",
+                label="Download NetworkX MindMap as JPEG",
                 data=nx_img,
-                file_name="network_mindmap.jpeg",
+                file_name="networkx_mindmap.jpeg",
                 mime="image/jpeg"
             )
             
-            st.subheader("Printable Hierarchy View")
+            st.subheader("Graphviz Mindmap")
             st.graphviz_chart(gv_graph)
             
             # Download button for Graphviz graph
             gv_img = save_graphviz_as_image(gv_graph)
             if gv_img:
                 st.download_button(
-                    label="Download Hierarchy View as JPEG",
+                    label="Download Graphviz MindMap as JPEG",
                     data=gv_img,
-                    file_name="hierarchy_mindmap.jpeg",
+                    file_name="graphviz_mindmap.jpeg",
                     mime="image/jpeg"
                 )
         else:
@@ -275,6 +268,9 @@ st.code("""
 pip install streamlit openai-whisper torch numpy nltk matplotlib networkx graphviz transformers spacy
 python -m spacy download en_core_web_sm
 python -c "import nltk; nltk.download('punkt')"
+        
+# For Whisper:
+# Download ffmpeg build and add to PATH
 
 # For Graphviz:
 # Windows: Download from graphviz.org and add to PATH
