@@ -3,8 +3,8 @@ whisper-timestamped
 torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 numpy==1.26.2
 graphviz==0.20.3
-spacy=3.8.5
-transformers=4.42.4
+spacy==3.8.5
+transformers==4.42.4
 nltk==3.9.1
 matplotlib=3.8.3
 networkx==3.3
