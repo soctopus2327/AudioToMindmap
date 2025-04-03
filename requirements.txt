@@ -2,10 +2,8 @@ streamlit==1.32.0
 whisper-timestamped==1.14.2
 torch==2.2.1 --index-url https://download.pytorch.org/whl/cpu
 numpy==1.26.4
-pygraphviz==1.12
-spacy==3.7.4
-transformers==4.38.2
-nltk==3.8.1
-matplotlib==3.7.4
 networkx==3.2.1
+matplotlib==3.7.4
+nltk==3.8.1  # Explicitly add nltk
+spacy==3.7.4
 python-dotenv==1.0.0
