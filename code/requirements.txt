@@ -1,0 +1,11 @@
+streamlit
+openai-whisper
+torch
+numpy
+nltk
+matplotlib
+networkx
+pygraphviz
+transformers
+spacy
+python-dotenv
