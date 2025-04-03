@@ -1,141 +1,283 @@
+import os
+import re
 import streamlit as st
 import whisper
 import torch
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
 import nltk
-import re
-from transformers import BertTokenizer, BertModel
-from nltk.corpus import stopwords
-import soundfile as sf
 import tempfile
-import os
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase
-import av
+from collections import defaultdict, Counter
+import matplotlib.pyplot as plt
+import networkx as nx
 import graphviz
+from transformers import BertTokenizer, BertModel
+import spacy
+from io import BytesIO
 
-st.title("Audio Transcription and Relationship Inference")
-st.write("Upload an audio file or record your voice to transcribe and analyze relationships between sentences.")
+# Load English language model for spaCy
+try:
+    nlp = spacy.load("en_core_web_sm")
+except:
+    st.error("Please install spaCy English model: python -m spacy download en_core_web_sm")
+    st.stop()
 
-option = st.radio("Select input method:", ("Record Audio", "Upload Audio"))
-audio_path = None
-
-def save_audio(audio_frames):
-    audio_path = "recorded_audio.wav"
-    with open(audio_path, "wb") as f:
-        for frame in audio_frames:
-            f.write(frame.to_ndarray().tobytes())
-    return audio_path
-
-class AudioProcessor(AudioProcessorBase):
-    def __init__(self):
-        self.frames = []
-
-    def recv(self, frame):
-        self.frames.append(frame)
-        return frame
-
-if option == "Record Audio":
-    st.write("Click 'Start' to record and 'Stop' to save the audio.")
-    webrtc_ctx = webrtc_streamer(key="audio", audio_receiver_size=256, media_stream_constraints={"audio": True})
-    if webrtc_ctx and webrtc_ctx.state.playing and webrtc_ctx.audio_receiver:
-        audio_frames = webrtc_ctx.audio_receiver.get_frames()
-        if audio_frames:
-            audio_path = save_audio(audio_frames)
-            st.audio(audio_path)
-        else:
-            st.warning("No audio frames captured. Please check your microphone settings.")
-elif option == "Upload Audio":
-    uploaded_file = st.file_uploader("Upload an audio file (WAV format):", type=["wav"])
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            audio_path = tmp_file.name
-            st.audio(audio_path)
-
-if audio_path:
-    model = whisper.load_model("base")
-    transcription = model.transcribe(audio_path)
-    text = transcription["text"]
-    st.subheader("Transcription:")
-    st.markdown("<div style='max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;'>" + text + "</div>", unsafe_allow_html=True)
-
+# --------------------------
+# 1. Text Processing
+# --------------------------
+def process_text(text):
+    """Extract sentences and BERT embeddings"""
     try:
-        nltk.download("punkt")
+        nltk.download("punkt", quiet=True)
         sentences = nltk.sent_tokenize(text)
     except:
         sentences = re.split(r'(?<=[.!?])\s+', text)
-
+    
+    # Remove very short/long sentences
+    sentences = [s.strip() for s in sentences if 5 <= len(s.split()) <= 30]
+    
+    if len(sentences) < 2:
+        return None, None
+    
+    # Get BERT embeddings
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    bert_model = BertModel.from_pretrained("bert-base-uncased")
-
+    model = BertModel.from_pretrained("bert-base-uncased")
+    
     def get_bert_embeddings(sentence):
-        inputs = tokenizer(sentence, return_tensors="pt", padding=True, truncation=True)
+        inputs = tokenizer(sentence, return_tensors="pt", padding=True, truncation=True, max_length=128)
         with torch.no_grad():
-            outputs = bert_model(**inputs)
+            outputs = model(**inputs)
         return outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
+    
+    embeddings = [get_bert_embeddings(sent) for sent in sentences]
+    return sentences, embeddings
 
-    sentence_embeddings = [get_bert_embeddings(sent) for sent in sentences]
-
-    def infer_relationships(sentences, embeddings):
+# --------------------------
+# 2. Relationship Extraction
+# --------------------------
+def extract_relationships(sentences, embeddings):
+    """Find semantic relationships between sentences"""
+    relationships = []
+    threshold = 0.65  # Start with lower threshold
+    
+    # Try with decreasing thresholds if few relationships found
+    for _ in range(3):
         relationships = []
-        threshold = 0.7
         for i in range(len(embeddings)):
             for j in range(i + 1, len(embeddings)):
                 sim = np.dot(embeddings[i], embeddings[j]) / (np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j]))
                 if sim > threshold:
-                    relationships.append((sentences[i], sentences[j]))
-        return relationships
+                    relationships.append((sentences[i], sentences[j], sim))
+        
+        if len(relationships) >= max(3, len(sentences)//2):  # Adaptive minimum
+            break
+        threshold -= 0.05
+    
+    return relationships if relationships else None
 
-    relations = infer_relationships(sentences, sentence_embeddings)
+def extract_key_elements(text):
+    """Extract keywords and entities using spaCy"""
+    doc = nlp(text)
+    
+    # Extract key phrases (noun chunks)
+    key_phrases = list(set([chunk.text for chunk in doc.noun_chunks if 2 <= len(chunk.text.split()) <= 4]))
+    
+    # Extract named entities
+    entities = {
+        'people': list(set([ent.text for ent in doc.ents if ent.label_ in ["PERSON", "ORG"]])),
+        'numbers': list(set([ent.text for ent in doc.ents if ent.label_ in ["MONEY", "PERCENT", "DATE", "QUANTITY"]]))
+    }
+    
+    return key_phrases, entities
 
-    def create_mindmap(relationships, central_theme):
-        dot = graphviz.Digraph(comment='Mind Map')
-        dot.attr(size="8,8!")
-        dot.attr(rankdir="TB", ranksep="1.5", nodesep="0.5")
-        dot.node("Central Theme", central_theme)
-        added_nodes = {}
-        for sent1, sent2 in relationships:
-            if sent1 not in added_nodes:
-                dot.node(sent1, sent1)
-                added_nodes[sent1] = sent1
-            if sent2 not in added_nodes:
-                dot.node(sent2, sent2)
-                added_nodes[sent2] = sent2
-            dot.edge(added_nodes[sent1], added_nodes[sent2])
-        return dot
+# --------------------------
+# 3. Mindmap Generation
+# --------------------------
+def create_mindmap(text):
+    # Process text and get relationships
+    sentences, embeddings = process_text(text)
+    if not sentences:
+        return None, None
+    
+    relationships = extract_relationships(sentences, embeddings)
+    if not relationships:
+        return None, None
+    
+    key_phrases, entities = extract_key_elements(text)
+    
+    # Create NetworkX graph
+    nx_graph = nx.Graph()
+    
+    # Central node (most connected sentence)
+    connection_counts = defaultdict(int)
+    for rel in relationships:
+        connection_counts[rel[0]] += 1
+        connection_counts[rel[1]] += 1
+    central_node = max(connection_counts.items(), key=lambda x: x[1])[0]
+    nx_graph.add_node(central_node, level=0, type='central', size=3000)
+    
+    # Add relationships
+    for rel in relationships:
+        if rel[0] == central_node or rel[1] == central_node:
+            other_node = rel[1] if rel[0] == central_node else rel[0]
+            nx_graph.add_node(other_node, level=1, type='sentence', size=2000)
+            nx_graph.add_edge(central_node, other_node, weight=rel[2])
+    
+    # Add key phrases and entities
+    for phrase in key_phrases[:10]:  # Top 10 phrases
+        nx_graph.add_node(phrase, level=2, type='phrase', size=1500)
+        # Connect to most relevant sentence
+        best_sent = None
+        best_sim = 0
+        for node in nx_graph.nodes():
+            if nx_graph.nodes[node]['type'] == 'sentence' and phrase.lower() in node.lower():
+                nx_graph.add_edge(node, phrase, weight=0.8)
+                best_sent = None
+                break
+        if best_sent:
+            nx_graph.add_edge(best_sent, phrase, weight=0.7)
+    
+    # Create Graphviz graph with improved formatting
+    gv_graph = graphviz.Digraph(engine='dot')
+    gv_graph.attr(rankdir='TB', size='12,12', ratio='auto')
+    
+    # Add nodes with styling
+    for node in nx_graph.nodes():
+        node_type = nx_graph.nodes[node]['type']
+        # Wrap text to multiple lines
+        wrapped_text = '\n'.join([node[i:i+30] for i in range(0, len(node), 30)])
+        if node_type == 'central':
+            gv_graph.node(str(hash(node)), wrapped_text, shape='doublecircle', 
+                         style='filled', fillcolor='#4E79A7', fontsize='14')
+        elif node_type == 'sentence':
+            gv_graph.node(str(hash(node)), wrapped_text, shape='ellipse', 
+                          style='filled', fillcolor='#F28E2B', fontsize='12')
+        else:
+            gv_graph.node(str(hash(node)), wrapped_text, shape='box', 
+                          style='filled', fillcolor='#59A14F', fontsize='10')
+    
+    # Add edges
+    for edge in nx_graph.edges():
+        gv_graph.edge(str(hash(edge[0])), str(hash(edge[1])))
+    
+    return nx_graph, gv_graph
 
-    # def create_mindmap(relationships):
-    #     dot = graphviz.Digraph(comment='Mind Map')
-    #     dot.attr(size="8,8!")
-    #     dot.attr(rankdir="TB", ranksep="1.5", nodesep="0.5")  # Top-to-Bottom layout
-    #     dot.node("Central Theme", "Main Topic")
-    #     for idx, (sent1, sent2) in enumerate(relationships[:10]):
-    #         dot.node(f"node{idx}1", sent1)
-    #         dot.node(f"node{idx}2", sent2)
-    #         dot.edge("Central Theme", f"node{idx}1")
-    #         dot.edge(f"node{idx}1", f"node{idx}2")
-    #     return dot
+# --------------------------
+# 4. Visualization
+# --------------------------
+def draw_networkx_graph(G):
+    plt.figure(figsize=(16, 12))
+    
+    # Prepare node colors and sizes
+    node_colors = []
+    node_sizes = []
+    for node in G.nodes():
+        node_type = G.nodes[node]['type']
+        if node_type == 'central':
+            node_colors.append('#4E79A7')
+            node_sizes.append(3000)
+        elif node_type == 'sentence':
+            node_colors.append('#F28E2B')
+            node_sizes.append(2000)
+        else:
+            node_colors.append('#59A14F')
+            node_sizes.append(1500)
+    
+    pos = nx.spring_layout(G, k=0.6, seed=42)
+    nx.draw(G, pos, 
+           node_color=node_colors,
+           node_size=node_sizes,
+           edge_color='#888888',
+           width=[G.edges[e]['weight'] for e in G.edges()],
+           with_labels=True,
+           font_size=9)
+    
+    plt.title("Semantic Mindmap", pad=20)
+    plt.axis('off')
+    return plt
 
+def save_graph_as_image(plt_obj, format='jpeg'):
+    """Save matplotlib figure to bytes"""
+    buf = BytesIO()
+    plt_obj.savefig(buf, format=format, dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    return buf
 
-    st.subheader("Inferred Relationships:")
-    st.markdown("<div style='max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;'>", unsafe_allow_html=True)
-    for relation in relations:
-        st.write(f"- {relation[0]} ↔ {relation[1]}")
-    st.markdown("</div>", unsafe_allow_html=True)
+def save_graphviz_as_image(gv_graph, format='jpeg'):
+    """Save graphviz graph to bytes"""
+    try:
+        img_data = gv_graph.pipe(format='jpeg')
+        return BytesIO(img_data)
+    except Exception as e:
+        st.error(f"Failed to export Graphviz image: {str(e)}")
+        return None
 
-    st.subheader("Mind Map:")
-    mindmap = create_mindmap(relations, "THEME")
-    st.graphviz_chart(mindmap.source)
-    st.download_button("Download Mind Map as .dot", mindmap.source, file_name="mindmap.dot")
+# --------------------------
+# 5. Streamlit App
+# --------------------------
+st.title("🧠 Audio to Mindmap Converter")
 
-    mindmap.render("mindmap", format="png")
-    with open("mindmap.png", "rb") as img_file:
-        st.download_button("Download Mind Map as Image", img_file, file_name="mindmap.png", mime="image/png")
+uploaded_file = st.file_uploader("Upload audio file (WAV/MP3)", type=["wav", "mp3"])
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        audio_path = tmp_file.name
+    
+    # Transcription
+    with st.spinner("Transcribing audio..."):
+        try:
+            model = whisper.load_model("base")
+            result = model.transcribe(audio_path)
+            text = result["text"]
+            st.subheader("Transcript")
+            st.text_area("", text, height=200)
+        except Exception as e:
+            st.error(f"Transcription failed: {str(e)}")
+            st.stop()
+    
+    # Mindmap Generation
+    with st.spinner("Building semantic mindmap..."):
+        nx_graph, gv_graph = create_mindmap(text)
+        
+        if nx_graph and gv_graph:
+            st.subheader("Interactive Network View")
+            plt_obj = draw_networkx_graph(nx_graph)
+            st.pyplot(plt_obj)
+            
+            # Download button for NetworkX graph
+            nx_img = save_graph_as_image(plt_obj)
+            st.download_button(
+                label="Download Network View as JPEG",
+                data=nx_img,
+                file_name="network_mindmap.jpeg",
+                mime="image/jpeg"
+            )
+            
+            st.subheader("Printable Hierarchy View")
+            st.graphviz_chart(gv_graph)
+            
+            # Download button for Graphviz graph
+            gv_img = save_graphviz_as_image(gv_graph)
+            if gv_img:
+                st.download_button(
+                    label="Download Hierarchy View as JPEG",
+                    data=gv_img,
+                    file_name="hierarchy_mindmap.jpeg",
+                    mime="image/jpeg"
+                )
+        else:
+            st.warning("Could not extract meaningful relationships from the audio content.")
 
-st.subheader("Setup Instructions:")
+# --------------------------
+# 6. Installation
+# --------------------------
+st.subheader("⚙️ Setup Instructions")
 st.code("""
-pip install streamlit openai-whisper torch transformers nltk networkx matplotlib numpy soundfile streamlit-webrtc av graphviz
-streamlit run app.py
+pip install streamlit openai-whisper torch numpy nltk matplotlib networkx graphviz transformers spacy
+python -m spacy download en_core_web_sm
+python -c "import nltk; nltk.download('punkt')"
+
+# For Graphviz:
+# Windows: Download from graphviz.org and add to PATH
+# Mac: brew install graphviz
+# Linux: sudo apt install graphviz
 """)
