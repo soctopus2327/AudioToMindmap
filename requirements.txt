@@ -1,12 +1,10 @@
-streamlit==1.32.0  # Known stable version
-rich==13.7.0  # Explicitly compatible version
-whisper-timestamped==1.14.2
-torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
-numpy==1.24.4
-networkx==3.2.1
-nltk==3.8.1
-spacy==3.7.4
-matplotlib==3.8.3
-graphviz==0.20.1
-transformers==4.38.2
-python-dotenv==1.0.0
+streamlit
+openai-whisper
+torch
+numpy
+nltk
+matplotlib
+networkx
+graphviz
+transformers
+spacy
