@@ -17,7 +17,7 @@ import subprocess
 import importlib.util
 
 nltk.download('punkt', quiet=True)
-t
+
 def is_spacy_model_installed(model_name):
     return importlib.util.find_spec(model_name) is not None
 
