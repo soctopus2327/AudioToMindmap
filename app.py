@@ -17,7 +17,7 @@ import subprocess
 import importlib.util
 
 nltk.download('punkt', quiet=True)
-
+t
 def is_spacy_model_installed(model_name):
     return importlib.util.find_spec(model_name) is not None
 
@@ -25,8 +25,10 @@ def is_spacy_model_installed(model_name):
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
+    from spacy.cli import download
+    download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
+
 
 
 # try:
