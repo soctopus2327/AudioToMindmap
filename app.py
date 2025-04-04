@@ -16,14 +16,15 @@ from io import BytesIO
 
 nltk.download('punkt', quiet=True)
 
-import spacy
+def is_spacy_model_installed(model_name):
+    return importlib.util.find_spec(model_name) is not None
+
+# Load or install spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
-except:
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
     nlp = spacy.load("en_core_web_sm")
-
 
 
 # try:
