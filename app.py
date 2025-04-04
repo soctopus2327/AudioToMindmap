@@ -222,7 +222,7 @@ def save_graphviz_as_image(gv_graph, format='jpeg'):
 # --------------------------
 st.title("🧠 Audio to Mindmap Generator")
 
-@st.cache_resource
+# @st.cache_resource
 # def load_model():
 #     return whisper.load_model("tiny")
 
