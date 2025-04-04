@@ -37,5 +37,8 @@ RUN pip install --upgrade pip && \
     python -m spacy download en_core_web_sm && \
     python -c "import nltk; nltk.download('punkt')"
 
+RUN pip install --upgrade "pip<23.0"  # Older pip avoids some resolver issues
+RUN pip install rich==13.7.0  # Install compatible rich first
+
 COPY . .
 CMD ["streamlit", "run", "app.py", "--server.port=$PORT", "--server.address=0.0.0.0"]
