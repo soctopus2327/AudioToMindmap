@@ -13,6 +13,8 @@ import graphviz
 from transformers import BertTokenizer, BertModel
 import spacy
 from io import BytesIO
+import subprocess
+import importlib.util
 
 nltk.download('punkt', quiet=True)
 
