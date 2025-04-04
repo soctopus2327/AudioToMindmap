@@ -223,8 +223,8 @@ def save_graphviz_as_image(gv_graph, format='jpeg'):
 st.title("🧠 Audio to Mindmap Generator")
 
 @st.cache_resource
-def load_model():
-    return whisper.load_model("tiny")
+# def load_model():
+#     return whisper.load_model("tiny")
 
 uploaded_file = st.file_uploader("Upload audio file (WAV/MP3)", type=["wav", "mp3"])
 if uploaded_file:
@@ -235,7 +235,7 @@ if uploaded_file:
     # Transcription
     with st.spinner("Transcribing audio..."):
         try:
-            model = whisper.load_model()
+            model = whisper.load_model("base")
             result = model.transcribe(audio_path)
             text = result["text"]
             st.subheader("Transcript")
