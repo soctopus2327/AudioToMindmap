@@ -1,11 +1,11 @@
-streamlit==1.39.0
-whisper-timestamped
-torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-numpy==1.26.2
-graphviz==0.20.3
-spacy==3.8.5
-transformers==4.42.4
-nltk==3.9.1
+streamlit==1.32.0
+whisper-timestamped==1.14.2
+torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+numpy==1.24.4
+networkx==3.2.1
+nltk==3.8.1
+spacy==3.7.4
 matplotlib==3.8.3
-networkx==3.3
-python-dotenv==1.0.1
+graphviz==0.20.1
+transformers==4.38.2
+python-dotenv==1.0.0
