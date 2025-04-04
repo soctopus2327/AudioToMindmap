@@ -1,4 +1,5 @@
-streamlit==1.32.0
+streamlit==1.32.0  # Known stable version
+rich==13.7.0  # Explicitly compatible version
 whisper-timestamped==1.14.2
 torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
 numpy==1.24.4
