@@ -14,11 +14,23 @@ from transformers import BertTokenizer, BertModel
 import spacy
 from io import BytesIO
 
+nltk.download('punkt', quiet=True)
+
+import spacy
 try:
     nlp = spacy.load("en_core_web_sm")
 except:
-    st.error("Please install spaCy English model: python -m spacy download en_core_web_sm")
-    st.stop()
+    import subprocess
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+
+
+
+# try:
+#     nlp = spacy.load("en_core_web_sm")
+# except:
+#     st.error("Please install spaCy English model: python -m spacy download en_core_web_sm")
+#     st.stop()
 
 # --------------------------
 # 1. Text Processing
@@ -26,7 +38,7 @@ except:
 def process_text(text):
     """Extract sentences and BERT embeddings"""
     try:
-        nltk.download("punkt", quiet=True)
+        # nltk.download("punkt", quiet=True)
         sentences = nltk.sent_tokenize(text)
     except:
         sentences = re.split(r'(?<=[.!?])\s+', text)
