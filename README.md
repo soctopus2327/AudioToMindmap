@@ -3,12 +3,12 @@
 ## 1. Clone the repository
 
 ## 2. Run the following commands
-`pip install streamlit openai-whisper torch numpy nltk matplotlib networkx graphviz transformers spacy
+`pip install streamlit openai-whisper torch numpy nltk matplotlib networkx graphviz transformers spacy`
 
-python -m spacy download en_core_web_sm
+`python -m spacy download en_core_web_sm`
 
-python -c "import nltk; nltk.download('punkt')"
-`
+`python -c "import nltk; nltk.download('punkt')"`
+
 ## 3. Download the following dependencies
 ### For Whisper:
 Download ffmpeg build and add to PATH
